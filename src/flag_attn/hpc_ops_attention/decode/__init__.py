@@ -23,6 +23,8 @@ import torch
 import triton
 import triton.language as tl
 
+from flag_attn.runtime.backend import resolve_operator as _resolve_operator
+
 
 try:
     import triton.experimental.tle.language as tle
@@ -695,4 +697,25 @@ __all__ = [
     "prepare_pure_triton_mtp1_workspace",
     "gpu_types",
     "tle",
+]
+
+
+
+
+def _unsupported_int8_decode(*args, **kwargs):
+    raise NotImplementedError("Prequantized INT8 Decode requires the MetaX backend")
+
+
+INT8DecodeInputs = _resolve_operator("hy3_INT8DecodeInputs", __name__, "_unsupported_int8_decode")
+INT8DecodeWorkspace = _resolve_operator("hy3_INT8DecodeWorkspace", __name__, "_unsupported_int8_decode")
+attention_decode_int8 = _resolve_operator("hy3_attention_decode_int8", __name__, "_unsupported_int8_decode")
+prepare_int8_decode_workspace = _resolve_operator("hy3_prepare_int8_decode_workspace", __name__, "_unsupported_int8_decode")
+quantize_int8_decode_inputs = _resolve_operator("hy3_quantize_int8_decode_inputs", __name__, "_unsupported_int8_decode")
+
+__all__ += [
+    "INT8DecodeInputs",
+    "INT8DecodeWorkspace",
+    "attention_decode_int8",
+    "prepare_int8_decode_workspace",
+    "quantize_int8_decode_inputs",
 ]

@@ -19,6 +19,82 @@ from __future__ import annotations
 import importlib
 
 _OPERATOR_EXPORTS = {
+    "hy3_INT8DecodeInputs": (
+        ".hpc_ops_attention.decode.int8",
+        "INT8DecodeInputs",
+    ),
+    "hy3_INT8DecodeWorkspace": (
+        ".hpc_ops_attention.decode.int8",
+        "INT8DecodeWorkspace",
+    ),
+    "hy3_attention": (
+        ".hpc_ops_attention",
+        "hy3_attention",
+    ),
+    "hy3_attention_decode_bf16_dynamic": (
+        ".hpc_ops_attention.decode.bf16",
+        "attention_decode_bf16_dynamic",
+    ),
+    "hy3_attention_decode_bf16_dynamic_prepare_workspace": (
+        ".hpc_ops_attention.decode.bf16",
+        "prepare_dynamic_bf16_workspace",
+    ),
+    "hy3_attention_decode_bf16_dynamic_refresh_task_map": (
+        ".hpc_ops_attention.decode.bf16",
+        "refresh_dynamic_bf16_task_map",
+    ),
+    "hy3_attention_decode_bf16_dynamic_select_policy": (
+        ".hpc_ops_attention.decode.bf16",
+        "select_dynamic_bf16_policy",
+    ),
+    "hy3_attention_decode_bf16_dynamic_workspace_is_reset": (
+        ".hpc_ops_attention.decode.bf16",
+        "bf16_dynamic_workspace_is_reset",
+    ),
+    "hy3_attention_decode_bf16_static": (
+        ".hpc_ops_attention.decode.bf16",
+        "attention_decode_bf16_static",
+    ),
+    "hy3_attention_decode_bf16_static_prepare_workspace": (
+        ".hpc_ops_attention.decode.bf16",
+        "prepare_static_bf16_workspace",
+    ),
+    "hy3_attention_decode_bf16_static_select_policy": (
+        ".hpc_ops_attention.decode.bf16",
+        "select_static_bf16_policy",
+    ),
+    "hy3_attention_decode_int8": (
+        ".hpc_ops_attention.decode.int8",
+        "attention_decode_int8",
+    ),
+    "hy3_attention_dispatch": (
+        ".hpc_ops_attention",
+        "hy3_attention",
+    ),
+    "hy3_attention_prefill_bf16": (
+        ".hpc_ops_attention.prefill.bf16",
+        "attention_with_kvcache_blocksparse_prefill_bf16",
+    ),
+    "hy3_attention_prefill_int8": (
+        ".hpc_ops_attention.prefill.int8",
+        "attention_with_kvcache_blocksparse_prefill_int8",
+    ),
+    "hy3_attention_prepare": (
+        ".hpc_ops_attention",
+        "hy3_attention_prepare",
+    ),
+    "hy3_prepare_int8_decode_workspace": (
+        ".hpc_ops_attention.decode.int8",
+        "prepare_int8_decode_workspace",
+    ),
+    "hy3_prepare_int8_prefill_inputs": (
+        ".hpc_ops_attention.prefill.int8",
+        "prepare_int8_prefill_inputs",
+    ),
+    "hy3_quantize_int8_decode_inputs": (
+        ".hpc_ops_attention.decode.int8",
+        "quantize_int8_decode_inputs",
+    ),
     "SPARSE_BLOCK_SIZE": (".msa.index_topk", "SPARSE_BLOCK_SIZE"),
     "chunk_gdn2": (".FLA.gdn2", "chunk_gdn2"),
     "chunk_gla": (".FLA.gla", "chunk_gla"),
