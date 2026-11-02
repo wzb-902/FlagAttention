@@ -1,10 +1,7 @@
 # Copyright (c) 2026 Parallax authors.
 # SPDX-License-Identifier: MIT
 #
-# Derived from the Parallax implementation in FlagAttention PR #57.
-# Modified for MetaX C550 adaptation and optimization.
-# Related upstream Parallax project: https://github.com/Yifei-Zuo/Parallax
-# Upstream project copyright notice: Copyright (c) 2026 Yifei Zuo
+# Copyright (c) 2026 Yifei Zuo
 #
 # MIT License
 #
@@ -26,31 +23,6 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""Single-token Parallax decode written in ordinary Triton.
-
-This is the Triton counterpart of the CuTeDSL SM90 decode shipped by the
-external ``parallax-kernel`` package (https://github.com/Yifei-Zuo/Parallax).
-It uses the same ``(B, 1, H_q, D)`` query and ``(B, L, H_kv, D)`` cache layouts
-and evaluates the same composite Parallax attention formula::
-
-    s1_j = scale * dot(q, k_j)
-    s2_j = dot(r, k_j)
-    p1   = exp(s1)
-    p2   = p1 * s2
-    out  = O1 / d1 * (1 + d2 / d1) - O2 / d1
-
-where ``d1=sum(p1)``, ``d2=sum(p2)``, ``O1=sum(p1*v)`` and
-``O2=sum(p2*v)``.  All online-softmax state and the split merge are fp32.
-
-The implementation has two forward-only paths:
-
-* one CTA per ``(batch, query-head)`` for short caches, sliding windows and
-  runtime ``seqused_k``;
-* split-KV partial reductions followed by a log-sum-exp merge for long-cache,
-  low-occupancy decode.
-
-K and V tiles use ordinary Triton loads; no Triton language extension is required.
-"""
 
 from __future__ import annotations
 
@@ -59,21 +31,16 @@ import os
 from functools import lru_cache, wraps
 
 import torch
-
 import triton
 import triton.language as tl
 
 from flag_attn.FLA.utils import get_num_sms, is_cuda_graph_capturing
 
 
-# Deprecated compatibility alias for existing decode callers and test guards.
-# It now denotes availability of the ordinary Triton decode implementation,
-# not availability of a language extension. No extension import is performed.
+# Compatibility alias; this backend uses ordinary Triton.
 HAS_TRITON_DECODE = True
 HAS_TLE = HAS_TRITON_DECODE
 
-# Triton 3.6 rejects ordinary Python globals referenced by @triton.jit.  This
-# must be an instantiated tl.constexpr (a type annotation is not sufficient).
 _LOG2E = tl.constexpr(1.4426950408889634)
 _BLOCK_N: int = 128
 _MAX_SPLITS: int = 32
@@ -106,7 +73,6 @@ def _parallax_decode_kernel(
     WINDOW_SIZE_LEFT: tl.constexpr,
     USE_SEQLEN: tl.constexpr,
 ):
-    """One online-softmax reduction per batch/query-head."""
     i_bh = tl.program_id(0).to(tl.int64)
     i_b = i_bh // HQ
     i_hq = i_bh % HQ
@@ -150,8 +116,6 @@ def _parallax_decode_kernel(
         alpha = _exp2(m - m_safe)
         p1 = _exp2(s1 - m_safe)
         p2 = p1 * s2
-        # Start V only after the score consumes K. This keeps the two full
-        # [BN, BK] tiles from having overlapping live ranges.
         b_v = tl.load(v + kv_offsets, mask=mask_kv, other=0.0)
         b_v = b_v.to(tl.float32)
         d1 = d1 * alpha + tl.sum(p1, axis=0)
@@ -186,7 +150,6 @@ def _parallax_decode_split_kernel(
     BN: tl.constexpr,
     NUM_SPLITS: tl.constexpr,
 ):
-    """Compute one fp32 online-softmax state per KV split."""
     i_bh = tl.program_id(0).to(tl.int64)
     i_split = tl.program_id(1)
     i_b = i_bh // HQ
@@ -194,8 +157,6 @@ def _parallax_decode_split_kernel(
     i_h = i_hq // G
 
     num_blocks = tl.cdiv(Skv, BN)
-    # Proportional boundaries keep all splits non-empty and balanced even when
-    # the number of KV tiles is not divisible by NUM_SPLITS.
     first_block = (i_split * num_blocks) // NUM_SPLITS
     last_block = ((i_split + 1) * num_blocks) // NUM_SPLITS
 
@@ -237,9 +198,6 @@ def _parallax_decode_split_kernel(
         m = m_new
 
     state_offset = i_bh * NUM_SPLITS + i_split
-    # m/d1/d2 deliberately retain shape (1,) throughout the online reduction.
-    # Triton 3.6 requires a block pointer tensor when storing a block value;
-    # a scalar pointer plus a one-element block is rejected.
     state_ptr_offset = state_offset + tl.arange(0, 1)
     tl.store(partial_m + state_ptr_offset, m)
     tl.store(partial_d1 + state_ptr_offset, d1)
@@ -262,7 +220,6 @@ def _parallax_decode_merge_kernel(
     NUM_SPLITS: tl.constexpr,
     BSPLIT: tl.constexpr,
 ):
-    """Log-sum-exp merge of the split-local Parallax states."""
     i_bh = tl.program_id(0).to(tl.int64)
     offs_s = tl.arange(0, BSPLIT)
     mask_s = offs_s < NUM_SPLITS
@@ -307,10 +264,7 @@ def _env_choice(name: str, default: int, choices: tuple[int, ...]) -> int:
     return value
 
 
-# Legacy PARALLAX_TLE_* environment names remain supported for compatibility.
 def _launch_config(kv_len: int, head_dim: int) -> tuple[int, int, int, int]:
-    """Select a shape-aware default while retaining explicit tuning overrides."""
-    # Use a narrower KV tile for short caches with 128-wide heads.
     default_block_n = 64 if head_dim == 128 and kv_len <= 512 else _BLOCK_N
     block_n = _env_choice("PARALLAX_TLE_BLOCK_N", default_block_n, (64, 128))
     num_warps = _env_choice("PARALLAX_TLE_NUM_WARPS", _NUM_WARPS, (2, 4, 8))
@@ -326,7 +280,6 @@ def _choose_num_splits(
     block_n: int,
     max_splits: int,
 ) -> int:
-    """Choose enough split CTAs to fill an under-occupied GPU."""
     override = os.environ.get("PARALLAX_TLE_DECODE_SPLITS")
     num_blocks = triton.cdiv(kv_len, block_n)
     if override is not None:
@@ -334,10 +287,8 @@ def _choose_num_splits(
         if requested < 1:
             raise ValueError("PARALLAX_TLE_DECODE_SPLITS must be >= 1")
         return min(requested, num_blocks, max_splits)
-    # Split caches with at least 512 keys to expose more CTAs; clamp splits to available KV tiles.
     if kv_len < 512 or batch_heads >= get_num_sms(device_index):
         return 1
-    # Aim for two waves, capped so every split owns at least one KV tile.
     requested = triton.cdiv(2 * get_num_sms(device_index), batch_heads)
     return max(1, min(requested, num_blocks, max_splits))
 
@@ -345,7 +296,6 @@ def _choose_num_splits(
 def _split_workspace(
     device: torch.device, batch_heads: int, num_splits: int, head_dim: int
 ) -> tuple[torch.Tensor, ...]:
-    """Allocate invocation-owned buffers, including during CUDA graph capture."""
     scalar_shape = (batch_heads, num_splits)
     vector_shape = (batch_heads, num_splits, head_dim)
     return (
@@ -475,8 +425,6 @@ def parallax_attn_with_kvcache(
     if device_index is None:
         device_index = torch.cuda.current_device()
 
-    # Runtime lengths and windows use the one-CTA path so no split scans cache
-    # positions which are known to be inactive.
     num_splits = 1
     if seqused_k is None and window_left < 0:
         num_splits = _choose_num_splits(batch_heads, L, device_index, block_n, max_splits)

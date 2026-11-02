@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .decode import parallax_attn_with_kvcache, parallax_decode
-from .parallel import parallel_parallax
+from flag_attn.runtime.backend._metax.FLA.parallax.decode import (
+    parallax_attn_with_kvcache,
+    parallax_decode,
+)
+from flag_attn.runtime.backend._metax.FLA.parallax.parallel import parallel_parallax
 
 __all__ = ["parallel_parallax", "parallax_decode", "parallax_attn_with_kvcache"]
